@@ -4,6 +4,7 @@ project(os161 C)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu99")
 
 include_directories(kern/include)
+include_directories(kern/compile/DUMBVM/includelinks)
 include_directories(kern/compile)
 
 include_directories(userland/include)
