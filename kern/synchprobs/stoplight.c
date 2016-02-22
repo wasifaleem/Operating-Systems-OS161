@@ -68,6 +68,15 @@
 #include <thread.h>
 #include <test.h>
 #include <synch.h>
+#include <stdarg.h>
+
+#define NUM_QUADRANTS 4
+#define MAX_CONCURRENT_INTERSECTION_CARS 3
+
+static struct semaphore *intersection_semaphore;   // Allow multiple cars to enter intersection
+static struct lock *quadrant_lock[NUM_QUADRANTS];  // Enforce that no two cars may be in the same quadrant at the same time
+
+void navigate_to_quadrants(unsigned int index, int count,...);
 
 /*
  * Called by the driver during initialization.
@@ -75,7 +84,12 @@
 
 void
 stoplight_init() {
-	return;
+	intersection_semaphore = sem_create("intersection_semaphore", MAX_CONCURRENT_INTERSECTION_CARS);
+	for (int i = 0; i< NUM_QUADRANTS; i++) {
+		char name[14];
+		snprintf(name, 14, "quadrant_%d_lk", i);
+		quadrant_lock[i] = lock_create(name);
+	}
 }
 
 /*
@@ -83,36 +97,73 @@ stoplight_init() {
  */
 
 void stoplight_cleanup() {
-	return;
+	sem_destroy(intersection_semaphore);
+	for (int i = 0; i< NUM_QUADRANTS; i++) {
+		lock_destroy(quadrant_lock[i]);
+	}
 }
 
 void
 turnright(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
-	return;
+	P(intersection_semaphore);
+
+	navigate_to_quadrants(index, 1,  direction);
+
+	V(intersection_semaphore);
 }
 void
 gostraight(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
-	return;
+	P(intersection_semaphore);
+
+	navigate_to_quadrants(index, 2,  direction, (direction + 3) % 4);
+
+	V(intersection_semaphore);
 }
 void
 turnleft(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
-	/*
-	 * Implement this function.
-	 */
-	return;
+	P(intersection_semaphore);
+
+	navigate_to_quadrants(index, 3,  direction, (direction + 3) % 4, (direction + 2) % 4);
+
+	V(intersection_semaphore);
+}
+
+/**
+ * Allows car to navigate quadrant safely.
+ * Accepts and count of quadrants and their index as var-args.
+ *
+ * Ex: navigate_to_quadrants(index, 3,  enter_quad, pass_through_quad, exit_quad)
+ */
+void
+navigate_to_quadrants(unsigned int index, int count, ...) {
+	va_list ap;
+	va_start(ap, count);
+
+	int release = -1;
+	int end_quad = count - 1;
+
+	for (int i = 0; i < count; i++) {
+		unsigned int quad = va_arg(ap, unsigned int);
+
+		lock_acquire(quadrant_lock[quad]);
+		kprintf_n("lock %d acquired\n", quad);
+		inQuadrant(quad, index);
+
+		if (release != -1) {
+			kprintf_n("lock %d released\n", release);
+			lock_release(quadrant_lock[release]);
+		}
+
+		if (i == end_quad) {
+			leaveIntersection(index);
+			kprintf_n("lock %d released\n", quad);
+			lock_release(quadrant_lock[quad]);
+		}
+
+		release = quad;
+	}
+	va_end (ap);
 }

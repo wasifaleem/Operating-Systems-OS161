@@ -40,13 +40,20 @@
 #include <test.h>
 #include <synch.h>
 
+static struct lock *wm_lock;
+static struct cv *wm_male_available_cv, *wm_female_available_cv, *wm_male_matched_cv, *wm_female_matched_cv;
+static volatile int wm_male_count = 0, wm_female_count = 0;
+
 /*
  * Called by the driver during initialization.
  */
 
 void whalemating_init() {
-	return;
-}
+	wm_lock = lock_create("wm_lock");
+	wm_male_available_cv = cv_create("wm_male_available_cv");
+	wm_male_matched_cv = cv_create("wm_male_matched_cv");
+	wm_female_available_cv = cv_create("wm_female_available_cv");
+	wm_female_matched_cv = cv_create("wm_female_matched_cv");}
 
 /*
  * Called by the driver during teardown.
@@ -54,38 +61,65 @@ void whalemating_init() {
 
 void
 whalemating_cleanup() {
-	return;
-}
+	lock_destroy(wm_lock);
+	cv_destroy(wm_male_available_cv);
+	cv_destroy(wm_male_matched_cv);
+	cv_destroy(wm_female_available_cv);
+	cv_destroy(wm_female_matched_cv);}
 
 void
 male(uint32_t index)
 {
-	(void)index;
-	/*
-	 * Implement this function by calling male_start and male_end when
-	 * appropriate.
-	 */
-	return;
+	male_start(index);
+
+	lock_acquire(wm_lock);
+
+	++wm_male_count;
+	cv_signal(wm_male_available_cv, wm_lock);
+	cv_wait(wm_male_matched_cv, wm_lock);
+	--wm_male_count;
+
+	lock_release(wm_lock);
+
+	male_end(index);
 }
 
 void
 female(uint32_t index)
 {
-	(void)index;
-	/*
-	 * Implement this function by calling female_start and female_end when
-	 * appropriate.
-	 */
-	return;
+	female_start(index);
+
+	lock_acquire(wm_lock);
+
+	++wm_female_count;
+	cv_signal(wm_female_available_cv, wm_lock);
+	cv_wait(wm_female_matched_cv, wm_lock);
+	--wm_female_count;
+
+	lock_release(wm_lock);
+
+	female_end(index);
 }
 
 void
 matchmaker(uint32_t index)
 {
-	(void)index;
-	/*
-	 * Implement this function by calling matchmaker_start and matchmaker_end
-	 * when appropriate.
-	 */
-	return;
+	matchmaker_start(index);
+
+	lock_acquire(wm_lock);
+
+	while (wm_male_count == 0) {
+		cv_wait(wm_male_available_cv, wm_lock);
+	}
+
+	while (wm_female_count == 0) {
+		cv_wait(wm_female_available_cv, wm_lock);
+	}
+
+	cv_signal(wm_male_matched_cv, wm_lock);
+	cv_signal(wm_female_matched_cv, wm_lock);
+
+	lock_release(wm_lock);
+
+	matchmaker_end(index);
 }
