@@ -390,9 +390,6 @@ rwlock_acquire_read(struct rwlock *rwlock) {
 	while (rwlock->write_request_count) {
 		cv_wait(rwlock->rwlock_cv, rwlock->rwlock_lock);
 	}
-	while (rwlock->active_writer_count) {
-		cv_wait(rwlock->rwlock_cv, rwlock->rwlock_lock);
-	}
 
 	rwlock->active_reader_count++;
 
