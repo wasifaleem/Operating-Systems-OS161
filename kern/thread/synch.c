@@ -387,6 +387,9 @@ rwlock_acquire_read(struct rwlock *rwlock) {
 	lock_acquire(rwlock->rwlock_lock);
 
 	/* wait until active writers and all waiting writers complete */
+	while (rwlock->active_writer_count) {
+		cv_wait(rwlock->rwlock_cv, rwlock->rwlock_lock);
+	}
 	while (rwlock->write_request_count) {
 		cv_wait(rwlock->rwlock_cv, rwlock->rwlock_lock);
 	}
