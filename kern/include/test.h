@@ -59,9 +59,18 @@ int threadtest2(int, char **);
 int threadtest3(int, char **);
 int semtest(int, char **);
 int locktest(int, char **);
+int locktest2(int, char **);
+int locktest3(int, char **);
 int cvtest(int, char **);
 int cvtest2(int, char **);
+int cvtest3(int, char **);
+int cvtest4(int, char **);
+int cvtest5(int, char **);
 int rwtest(int, char **);
+int rwtest2(int, char **);
+int rwtest3(int, char **);
+int rwtest4(int, char **);
+int rwtest5(int, char **);
 
 /* semaphore unit tests */
 int semu1(int, char **);
@@ -172,7 +181,9 @@ int ll16test(int, char **);
 #define SUCCESS 0
 #define FAIL 1
 
-void success(bool, uint32_t, const char *);
+int success(bool, const char *, const char *);
+
+int ksecprintf(const char *secret, const char *msg, const char *name);
 
 void random_yielder(uint32_t);
 void random_spinner(uint32_t);
