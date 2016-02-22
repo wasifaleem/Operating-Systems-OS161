@@ -357,8 +357,8 @@ rwlock_create(const char *name) {
 		return NULL;
 	}
 
-	rwlock->rwlock_cv = cv_create(strcat(kstrdup(name), "rwlock_cv"));
-	rwlock->rwlock_lock = lock_create(strcat(kstrdup(name), "rwlock_lock"));
+	rwlock->rwlock_cv = cv_create("rwlock_cv");
+	rwlock->rwlock_lock = lock_create("rwlock_lock");
 	rwlock->active_reader_count = 0;
 	rwlock->active_writer_count = 0;
 	rwlock->write_request_count = 0;
@@ -369,6 +369,9 @@ rwlock_create(const char *name) {
 void
 rwlock_destroy(struct rwlock *rwlock) {
 	KASSERT(rwlock != NULL);
+	KASSERT(rwlock->active_reader_count == 0);
+	KASSERT(rwlock->active_writer_count == 0);
+	KASSERT(rwlock->write_request_count == 0);
 
 	cv_destroy(rwlock->rwlock_cv);
 	lock_destroy(rwlock->rwlock_lock);
