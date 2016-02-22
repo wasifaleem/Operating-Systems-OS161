@@ -420,10 +420,7 @@ rwlock_acquire_write(struct rwlock *rwlock) {
 
 	rwlock->write_request_count++;
 	/* wait until active writers & readers complete */
-	while (rwlock->active_reader_count) {
-		cv_wait(rwlock->rwlock_cv, rwlock->rwlock_lock);
-	}
-	while (rwlock->active_writer_count) {
+	while (rwlock->active_writer_count && rwlock->active_reader_count) {
 		cv_wait(rwlock->rwlock_cv, rwlock->rwlock_lock);
 	}
 	rwlock->active_writer_count++;
