@@ -341,6 +341,11 @@ file      thread/threadlist.c
 file      proc/proc.c
 
 #
+# File table support
+#
+file      proc/fdtable.c
+
+#
 # Virtual memory system
 # (you will probably want to add stuff here while doing the VM assignment)
 #
