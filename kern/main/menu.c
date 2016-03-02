@@ -806,7 +806,7 @@ menu(char *args)
 	char buf[64];
 
 	menu_execute(args, 1);
-
+	init_console_fdescs();
 	while (1) {
 		/*
 		 * Defined in overwrite.h. If you want to change the kernel prompt, please

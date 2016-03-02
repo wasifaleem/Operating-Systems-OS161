@@ -48,6 +48,9 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
+#include <vfs.h>
+#include <kern/unistd.h>
+#include <kern/fcntl.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -226,6 +229,9 @@ proc_create_runprogram(const char *name)
 	if (curproc->p_cwd != NULL) {
 		VOP_INCREF(curproc->p_cwd);
 		newproc->p_cwd = curproc->p_cwd;
+	}
+	if (curthread->t_proc != NULL) { // TODO: is this the right place?
+		fdtable_copy(curproc->p_fdtable, newproc->p_fdtable);
 	}
 	spinlock_release(&curproc->p_lock);
 
