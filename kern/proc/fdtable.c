@@ -26,7 +26,20 @@ struct fdtable *fdtable_create(void) {
 
 void fdtable_destroy(struct fdtable *fdtable) {
     KASSERT(fdtable != NULL);
-
+    for (int i = 0; i < OPEN_MAX; i++) {
+        struct fdesc *fdesc = fdtable->fdt_descs[i];
+        if (fdesc != NULL) {
+            lock_acquire(fdesc->fd_lock);
+            fdesc->fd_ref_count--;
+            if (fdesc->fd_ref_count == 0) {
+                vfs_close(fdesc->fd_vnode);
+                lock_release(fdesc->fd_lock);
+                fdesc_destroy(fdesc);
+            } else {
+                lock_release(fdesc->fd_lock);
+            }
+        }
+    }
     kfree(fdtable);
 }
 

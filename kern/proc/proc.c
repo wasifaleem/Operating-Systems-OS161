@@ -51,6 +51,26 @@
 #include <vfs.h>
 #include <kern/unistd.h>
 #include <kern/fcntl.h>
+#include <kern/errno.h>
+#include <synch.h>
+
+
+struct proc_meta {
+    pid_t parent_pid;
+    volatile bool exited;
+    volatile int exit_code;
+    struct lock* lk;
+    struct cv* cv;
+	struct proc* proc;
+};
+
+static struct proc_meta* proc_meta_create(void);
+static void proc_meta_destroy(struct proc_meta*);
+
+static struct proc_meta* process_metadata[PID_MAX];
+
+static int assign_pid(struct proc* proc);
+static int reclaim_pid(pid_t* pid);
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -182,6 +202,8 @@ proc_destroy(struct proc *proc)
 	/* file table */
 	fdtable_destroy(proc->p_fdtable);
 
+//	reclaim_pid(&proc->pid);
+
 	kfree(proc->p_name);
 	kfree(proc);
 }
@@ -199,6 +221,52 @@ proc_bootstrap(void)
 }
 
 /*
+ * Create a fresh proc for use by fork.
+ *
+ * It will have parent's address space
+ */
+struct proc *proc_create_fork(int* errcode) {
+    KASSERT(curproc != NULL);
+
+	struct proc *newproc;
+    int result;
+
+	newproc = proc_create(curproc->p_name);
+	if (newproc == NULL) {
+        *errcode = ENOMEM;
+        return NULL;
+	}
+	newproc->parent_pid = curproc->pid;
+    if ((result = assign_pid(newproc))) {
+        proc_destroy(newproc);
+        *errcode = result;
+        return NULL;
+    }
+    fdtable_copy(curproc->p_fdtable, newproc->p_fdtable);
+
+	if ((result = as_copy(curproc->p_addrspace, &newproc->p_addrspace))) {
+		fdtable_destroy(newproc->p_fdtable);
+		proc_destroy(newproc);
+        *errcode = result;
+        return NULL;
+	}
+    /*
+     * Lock the current process to copy its current directory.
+     * (We don't need to lock the new process, though, as we have
+     * the only reference to it.)
+     */
+//    spinlock_acquire(&curproc->p_lock);
+//    if (curproc->p_cwd != NULL) {
+//        VOP_INCREF(curproc->p_cwd);
+//        newproc->p_cwd = curproc->p_cwd;
+//    }
+//    spinlock_release(&curproc->p_lock);
+
+    return newproc;
+}
+
+
+/*
  * Create a fresh proc for use by runprogram.
  *
  * It will have no address space and will inherit the current
@@ -211,6 +279,11 @@ proc_create_runprogram(const char *name)
 
 	newproc = proc_create(name);
 	if (newproc == NULL) {
+		return NULL;
+	}
+
+	if (assign_pid(newproc)) {
+		proc_destroy(newproc);
 		return NULL;
 	}
 
@@ -229,9 +302,6 @@ proc_create_runprogram(const char *name)
 	if (curproc->p_cwd != NULL) {
 		VOP_INCREF(curproc->p_cwd);
 		newproc->p_cwd = curproc->p_cwd;
-	}
-	if (curthread->t_proc != NULL) { // TODO: is this the right place?
-		fdtable_copy(curproc->p_fdtable, newproc->p_fdtable);
 	}
 	spinlock_release(&curproc->p_lock);
 
@@ -334,4 +404,112 @@ proc_setas(struct addrspace *newas)
 	proc->p_addrspace = newas;
 	spinlock_release(&proc->p_lock);
 	return oldas;
+}
+
+void exit_pid(pid_t *pid, int exitcode) {
+	kprintf("S exit_pid pid:%d\n", *pid);
+	KASSERT(process_metadata[*pid] != NULL);
+	KASSERT(process_metadata[*pid] != 0);
+
+	lock_acquire(process_metadata[*pid]->lk);
+	KASSERT(process_metadata[*pid]->exited== false);
+
+	for (int i = 0; i < PID_MAX; ++i) {
+        if (process_metadata[i] != NULL
+                && process_metadata[i]->parent_pid == *pid) {
+			process_metadata[i]->parent_pid = -1;
+//			if (process_metadata[i]->exited) {
+//				reclaim_pid(&i);
+//			}
+		}
+    }
+	KASSERT(process_metadata[*pid] != NULL);
+	process_metadata[*pid]->exited = true;
+    process_metadata[*pid]->exit_code = exitcode;
+//	proc_destroy(process_metadata[*pid]->proc);
+	cv_broadcast(process_metadata[*pid]->cv, process_metadata[*pid]->lk);
+    lock_release(process_metadata[*pid]->lk);
+	kprintf("exit_pid pid:%d parent:%d\n", *pid, (process_metadata[*pid]->parent_pid));
+	thread_exit(); // does not return
+}
+
+int wait_pid(pid_t *pid, int* exitcode) {
+	KASSERT(process_metadata[*pid] != NULL);
+	KASSERT(process_metadata[*pid] != 0);
+
+	struct proc_meta *pmeta = process_metadata[*pid];
+	if (pmeta == NULL) {
+		return ESRCH;
+	}
+	if (pmeta->parent_pid != curproc->pid) {
+		return ECHILD;
+	}
+	lock_acquire(pmeta->lk);
+	if (pmeta->exited == false) {
+		cv_wait(pmeta->cv, pmeta->lk);
+	}
+	KASSERT(pmeta->exited== true);
+	*exitcode = pmeta->exit_code;
+	lock_release(pmeta->lk);
+	kprintf("wait_pid pid:%d parent:%d\n", *pid, (process_metadata[*pid]->parent_pid));
+
+	reclaim_pid(pid);
+
+	return 0;
+}
+
+static int assign_pid(struct proc* proc) {
+	for (int i = 2; i <= PID_MAX; ++i) {
+		if (process_metadata[i] == NULL) {
+			proc->pid = i;
+            struct proc_meta *pmeta = proc_meta_create();
+            if (pmeta != NULL) {
+                pmeta->proc = proc;
+                process_metadata[i] = pmeta;
+				kprintf("assigned pid:%d from parent:%d\n", proc->pid, proc->parent_pid);
+				return 0;
+            } else {
+                return ENOMEM;
+            }
+		}
+	}
+	return ENPROC;
+}
+
+static int reclaim_pid(pid_t *pid) {
+	struct proc_meta* m = process_metadata[*pid];
+	if (m != NULL) {
+		kprintf("reclaim pid:%d to proc:%s parent:%d\n", m->proc->pid, m->proc->p_name, m->proc->parent_pid);
+		proc_meta_destroy(m);
+		process_metadata[*pid] = NULL;
+		return 0;
+	}
+	return ESRCH;
+}
+
+struct proc_meta *proc_meta_create(void) {
+    struct proc_meta* procm = kmalloc(sizeof(struct proc_meta));
+    if (procm == NULL) {
+        return NULL;
+    }
+    procm->lk = lock_create("proc_meta_lock");
+    if (procm->lk == NULL) {
+        kfree(procm);
+        return NULL;
+    }
+    procm->cv = cv_create("proc_meta_cv");
+    if (procm->cv == NULL) {
+        kfree(procm->lk);
+        kfree(procm);
+    }
+    procm->exited = false;
+	procm->parent_pid = curproc->pid;
+
+    return procm;
+}
+
+void proc_meta_destroy(struct proc_meta *procm) {
+    kfree(procm->cv);
+    kfree(procm->lk);
+    kfree(procm);
 }

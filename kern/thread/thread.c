@@ -519,14 +519,7 @@ thread_fork(const char *name,
 	/* Attach the new thread to its process */
 	if (proc == NULL) {
 		proc = curthread->t_proc;
-	} else {
-        // TODO: does this belong in proc_create_runprogram?
-        /* proc is new process */
-        /* Clone file table if curthread is not a kernel-only thread*/
-        if (curthread->t_proc != kproc) {
-            fdtable_copy(curproc->p_fdtable, proc->p_fdtable);
-        }
-    }
+	}
 	result = proc_addthread(proc, newthread);
 	if (result) {
 		/* thread_destroy will clean up the stack */

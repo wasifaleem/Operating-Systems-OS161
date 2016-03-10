@@ -75,6 +75,8 @@ struct proc {
 
 	/* file table */
 	struct fdtable* p_fdtable;
+
+	pid_t parent_pid, pid;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -82,6 +84,9 @@ extern struct proc *kproc;
 
 /* Call once during system startup to allocate data structures. */
 void proc_bootstrap(void);
+
+/* Create a fresh process for use by runprogram(). */
+struct proc *proc_create_fork(int* errcode);
 
 /* Create a fresh process for use by runprogram(). */
 struct proc *proc_create_runprogram(const char *name);
@@ -100,6 +105,9 @@ struct addrspace *proc_getas(void);
 
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
+
+void exit_pid(pid_t *pid, int exitcode);
+int wait_pid(pid_t *pid, int* exitcode);
 
 
 #endif /* _PROC_H_ */

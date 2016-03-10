@@ -68,4 +68,9 @@ int sys_lseek(int fd, off_t pos, int whence, int64_t *retval);
 int sys_chdir(const_userptr_t pathname, int *retval);
 int sys___getcwd(const_userptr_t buff, size_t buflen, int *retval);
 
+void sys__exit(int code);
+int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retval);
+int sys_getpid(pid_t *retval);
+int sys_fork(struct trapframe *tf, pid_t *retval);
+
 #endif /* _SYSCALL_H_ */
