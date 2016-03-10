@@ -445,7 +445,7 @@ int wait_pid(pid_t *pid, int* exitcode) {
 		return ECHILD;
 	}
 	lock_acquire(pmeta->lk);
-	if (pmeta->exited == false) {
+	while (pmeta->exited == false) {
 		cv_wait(pmeta->cv, pmeta->lk);
 	}
 	KASSERT(pmeta->exited== true);
@@ -454,12 +454,11 @@ int wait_pid(pid_t *pid, int* exitcode) {
 	kprintf("wait_pid pid:%d parent:%d\n", *pid, (process_metadata[*pid]->parent_pid));
 
 	reclaim_pid(pid);
-
 	return 0;
 }
 
 static int assign_pid(struct proc* proc) {
-	for (int i = 2; i <= PID_MAX; ++i) {
+	for (int i = PID_MIN+1; i <= PID_MAX; ++i) {
 		if (process_metadata[i] == NULL) {
 			proc->pid = i;
             struct proc_meta *pmeta = proc_meta_create();
