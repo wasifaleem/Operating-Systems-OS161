@@ -29,6 +29,7 @@ int validate_fdesc(int fd);
 void init_console_fdescs(void);
 
 void fdesc_destroy(struct fdesc *);
+void release_fdesc(struct fdesc *);
 
 
 #endif /* _FD_TABLE_H_ */

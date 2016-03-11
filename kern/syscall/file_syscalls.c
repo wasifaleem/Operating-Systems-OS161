@@ -39,14 +39,14 @@ int sys_open(userptr_t filename, int flags, int *retval) {
     }
 
     if ((result = vfs_open(path, flags, 0, &pfd->fd_vnode))) {
-        fdesc_destroy(pfd);
+        release_fdesc(pfd);
         return result;
     }
 
     if (flags && O_APPEND) {
         struct stat s;
         if ((result = VOP_STAT(pfd->fd_vnode, &s))) {
-            fdesc_destroy(pfd);
+            release_fdesc(pfd);
             return result;
         } else {
             lock_acquire(pfd->fd_lock);
@@ -67,15 +67,7 @@ int sys_close(int fd, int *retval) {
         return result;
     }
     struct fdesc *fdsc = curproc->p_fdtable->fdt_descs[fd];
-    lock_acquire(fdsc->fd_lock);
-    fdsc->fd_ref_count--;
-    if (fdsc->fd_ref_count == 0) {
-        vfs_close(fdsc->fd_vnode);
-        lock_release(fdsc->fd_lock);
-        fdesc_destroy(fdsc);
-    } else {
-        lock_release(fdsc->fd_lock);
-    }
+    release_fdesc(fdsc);
     curproc->p_fdtable->fdt_descs[fd] = NULL;
     *retval = 0;
     return 0;
@@ -136,7 +128,8 @@ int sys_write(int fd, const_userptr_t buff, size_t nbytes, int *retval) {
     kfree(kbuf);
 
     struct fdesc *fdsc = curproc->p_fdtable->fdt_descs[fd];
-    if (fdsc->fd_flags && O_RDONLY) {
+
+    if (fdsc->fd_flags == O_RDONLY || fdsc->fd_flags == O_CREAT) {
         return EBADF;
     }
 
@@ -167,8 +160,8 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
     if ((result = validate_fdesc(oldfd))) {
         return result;
     }
-    if ((result = validate_fdesc(newfd))) {
-        return result;
+    if (newfd < 0 || newfd >= OPEN_MAX) {
+        return EBADF;
     }
     if (oldfd == newfd) {
         *retval = oldfd;
@@ -183,6 +176,7 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
 
     lock_acquire(new_fdsc->fd_lock);
     new_fdsc->fd_ref_count++;
+    curproc->p_fdtable->fdt_descs[newfd] = new_fdsc;
     lock_release(new_fdsc->fd_lock);
 
     *retval = newfd;
@@ -197,7 +191,9 @@ int sys_lseek(int fd, off_t pos, int whence, int64_t *retval) {
     }
 
     struct fdesc *fdsc = curproc->p_fdtable->fdt_descs[fd];
-
+    if (!VOP_ISSEEKABLE(fdsc->fd_vnode)) {
+        return ESPIPE;
+    }
     lock_acquire(fdsc->fd_lock);
     switch (whence) {
         case SEEK_SET: {

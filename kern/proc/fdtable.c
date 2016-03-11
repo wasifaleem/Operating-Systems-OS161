@@ -29,15 +29,7 @@ void fdtable_destroy(struct fdtable *fdtable) {
     for (int i = 0; i < OPEN_MAX; i++) {
         struct fdesc *fdesc = fdtable->fdt_descs[i];
         if (fdesc != NULL) {
-            lock_acquire(fdesc->fd_lock);
-            fdesc->fd_ref_count--;
-            if (fdesc->fd_ref_count == 0) {
-                vfs_close(fdesc->fd_vnode);
-                lock_release(fdesc->fd_lock);
-                fdesc_destroy(fdesc);
-            } else {
-                lock_release(fdesc->fd_lock);
-            }
+            release_fdesc(fdesc);
         }
     }
     kfree(fdtable);
@@ -102,6 +94,22 @@ void fdesc_destroy(struct fdesc *fdesc) {
     kfree(fdesc->fd_vnode);
     kfree(fdesc->fd_path);
     kfree(fdesc);
+}
+
+void release_fdesc(struct fdesc *fdesc) {
+    KASSERT(fdesc != NULL);
+
+    lock_acquire(fdesc->fd_lock);
+    fdesc->fd_ref_count--;
+    if (fdesc->fd_ref_count == 0) {
+        if (fdesc->fd_vnode->vn_refcount >= 1) {
+            vfs_close(fdesc->fd_vnode);
+        }
+        lock_release(fdesc->fd_lock);
+        fdesc_destroy(fdesc);
+    } else {
+        lock_release(fdesc->fd_lock);
+    }
 }
 
 

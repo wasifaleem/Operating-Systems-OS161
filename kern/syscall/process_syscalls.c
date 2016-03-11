@@ -10,7 +10,11 @@
 #include <addrspace.h>
 #include <mips/trapframe.h>
 #include <kern/wait.h>
+#include <kern/fcntl.h>
+#include <vfs.h>
 
+
+#define NARG_MAX 1024
 
 int sys_getpid(pid_t *retval) {
     *retval = curproc->pid;
@@ -18,23 +22,27 @@ int sys_getpid(pid_t *retval) {
 }
 
 void sys__exit(int code) {
-    exit_pid(&curproc->pid, _MKWAIT_EXIT(code));
+    exit_pid(curproc->pid, code);
 }
 
 
 int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retval) {
     *retval = -1;
     int result, exitcode;
+
+    if (pid < PID_MIN) {
+        return ESRCH;
+    }
+
     if (options != 0
-        && pid > 1
         && curproc->pid != pid) {
         return EINVAL;
     }
-    if ((result = wait_pid(&pid, &exitcode))) {
+    if ((result = wait_pid(pid, &exitcode))) {
         return result;
     }
-    exitcode = _MKWAIT_EXIT(exitcode);
-    if((result = copyout(&exitcode, status, sizeof(int)))) {
+
+    if(status != NULL && (result = copyout(&exitcode, status, sizeof(int)))) {
         return result;
     }
     *retval = pid;
@@ -46,7 +54,6 @@ static void child_entry(void *data1, unsigned long data2) {
     struct trapframe *ktf = data1;
     struct trapframe ctf = *ktf;
     kfree(ktf);
-    kprintf("child_entry pid:%d\n", curproc->pid);
     enter_forked_process(&ctf);
 }
 
@@ -73,5 +80,16 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
     }
 
     *retval = newproc->pid;
+    return 0;
+}
+
+struct karg_buff {
+    char* buff;
+    size_t len;
+    int nargs;
+};
+
+int sys_execv(userptr_t program, userptr_t args, int *retval) {
+
     return 0;
 }

@@ -144,20 +144,27 @@ syscall(struct trapframe *tf)
 		case SYS___getcwd:
 		err = sys___getcwd((const_userptr_t) tf->tf_a0, (size_t) tf->tf_a1, &retval_v0);
 		break;
-		case SYS_getpid:
-		err = sys_getpid(&retval_v0);
-		break;
-		case SYS_waitpid:
-		err = sys_waitpid((int) tf->tf_a0, (userptr_t) tf->tf_a1, (int) tf->tf_a2, &retval_v0);
-		break;
+		case SYS_getpid: {
+			err = sys_getpid(&retval_v0);
+			break;
+		}
+		case SYS_waitpid: {
+			err = sys_waitpid((int) tf->tf_a0, (userptr_t) tf->tf_a1, (int) tf->tf_a2, &retval_v0);
+			break;
+		}
 		case SYS__exit: {
 			sys__exit((int) tf->tf_a0);
 			err = 0;
 			break;
 		}
-		case SYS_fork:
+		case SYS_fork: {
 			err = sys_fork(tf, &retval_v0);
 			break;
+		}
+		case SYS_execv: {
+			err = sys_execv((userptr_t)tf->tf_a0, (userptr_t)tf->tf_a1, &retval_v0);
+			break;
+		}
 			/* Add stuff here */
 
 		default:
@@ -206,7 +213,8 @@ enter_forked_process(struct trapframe *tf)
 	tf->tf_a3 = 0;
 
 	tf->tf_epc += 4;
-	kprintf("enter_forked_process pid:%d\n", curproc->pid);
+//	kprintf("enter_forked_process pid:%d\n", curproc->pid);
 
 	mips_usermode(tf);
 }
+

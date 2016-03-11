@@ -59,6 +59,10 @@ runprogram(char *progname)
 	vaddr_t entrypoint, stackptr;
 	int result;
 
+	if (curproc->p_fdtable->fdt_descs[0] == NULL) {
+		init_console_fdescs();
+	}
+
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {

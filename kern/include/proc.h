@@ -38,6 +38,7 @@
 
 #include <spinlock.h>
 #include <fdtable.h>
+#include "synch.h"
 
 struct addrspace;
 struct thread;
@@ -77,6 +78,9 @@ struct proc {
 	struct fdtable* p_fdtable;
 
 	pid_t parent_pid, pid;
+	volatile bool exited;
+	volatile int exit_code;
+	struct semaphore* sem_exit;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -106,8 +110,8 @@ struct addrspace *proc_getas(void);
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
 
-void exit_pid(pid_t *pid, int exitcode);
-int wait_pid(pid_t *pid, int* exitcode);
+void exit_pid(pid_t pid, int exitcode);
+int wait_pid(pid_t pid, int* exitcode);
 
 
 #endif /* _PROC_H_ */
