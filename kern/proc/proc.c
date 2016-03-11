@@ -238,16 +238,30 @@ struct proc *proc_create_fork(int* errcode) {
     }
 
 //	spinlock_acquire(&curproc->p_lock);
+	/*
+	 * Lock the current process to copy its current directory.
+	 * (We don't need to lock the new process, though, as we have
+	 * the only reference to it.)
+	 */
+//	spinlock_acquire(&curproc->p_lock);
+	if (curproc->p_cwd != NULL) {
+		VOP_INCREF(curproc->p_cwd);
+		newproc->p_cwd = curproc->p_cwd;
+	}
 
+	if (assign_pid(newproc)) {
+		proc_destroy(newproc);
+		return NULL;
+	}
 	fdtable_copy(curproc->p_fdtable, newproc->p_fdtable);
+//	spinlock_release(&curproc->p_lock);
+
 	if ((result = as_copy(curproc->p_addrspace, &newproc->p_addrspace))) {
 		fdtable_destroy(newproc->p_fdtable);
 		proc_destroy(newproc);
         *errcode = result;
         return NULL;
 	}
-
-//	spinlock_release(&curproc->p_lock);
 
     return newproc;
 }

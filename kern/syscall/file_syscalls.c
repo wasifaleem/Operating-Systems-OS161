@@ -81,15 +81,15 @@ int sys_read(int fd, const_userptr_t buff, size_t buflen, int *retval) {
         return result;
     }
 
-    void *kbuf = kmalloc(buflen);
-    if ((result = copyout(kbuf, (userptr_t) buff, buflen)) != 0) {
+    void *kbuf = kmalloc(sizeof(char*));
+    if ((result = copyout(kbuf, (userptr_t) buff, sizeof(char*))) != 0) {
         kfree(kbuf);
         return result;
     }
     kfree(kbuf);
 
     struct fdesc *fdsc = curproc->p_fdtable->fdt_descs[fd];
-    if (fdsc->fd_flags == O_WRONLY) {
+    if (fdsc->fd_flags & O_WRONLY) {
         return EBADF;
     }
 
@@ -120,8 +120,8 @@ int sys_write(int fd, const_userptr_t buff, size_t nbytes, int *retval) {
         return result;
     }
 
-    void *kbuf = kmalloc(nbytes);
-    if ((result = copyin((const_userptr_t) buff, kbuf, nbytes)) != 0) {
+    void *kbuf = kmalloc(sizeof(char*));
+    if ((result = copyin((const_userptr_t) buff, kbuf, sizeof(char*))) != 0) {
         kfree(kbuf);
         return result;
     }
@@ -183,7 +183,7 @@ int sys_dup2(int oldfd, int newfd, int *retval) {
     return 0;
 }
 
-int sys_lseek(int fd, off_t pos, int whence, int64_t *retval) {
+int sys_lseek(int fd, off_t pos, int whence, off_t *retval) {
     *retval = -1;
     int result;
     if ((result = validate_fdesc(fd))) {
@@ -220,6 +220,7 @@ int sys_lseek(int fd, off_t pos, int whence, int64_t *retval) {
     }
 
     if (*retval < 0) {
+//        *retval= -1;
         lock_release(fdsc->fd_lock);
         return EINVAL;
     }

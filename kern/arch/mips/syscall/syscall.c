@@ -131,7 +131,7 @@ syscall(struct trapframe *tf)
 		case SYS_lseek: {
 			off_t pos = (off_t)tf->tf_a2 << 32 | tf->tf_a3;
 			int32_t whence;
-			int64_t retval;
+			off_t retval;
 			copyin((const_userptr_t) tf->tf_sp + 16, &whence, sizeof(int32_t));
 			err = sys_lseek((int) tf->tf_a0, (off_t) pos, (int) whence, &retval);
 			retval_v0 = (int)((retval & 0xFFFFFFFF00000000) >> 32);
