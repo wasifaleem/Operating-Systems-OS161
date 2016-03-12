@@ -81,12 +81,12 @@ int sys_read(int fd, const_userptr_t buff, size_t buflen, int *retval) {
         return result;
     }
 
-    void *kbuf = kmalloc(sizeof(char*));
-    if ((result = copyout(kbuf, (userptr_t) buff, sizeof(char*))) != 0) {
-        kfree(kbuf);
-        return result;
-    }
-    kfree(kbuf);
+//    void *kbuf = kmalloc(sizeof(char*));
+//    if ((result = copyout(kbuf, (userptr_t) buff, sizeof(char*))) != 0) {
+//        kfree(kbuf);
+//        return result;
+//    }
+//    kfree(kbuf);
 
     struct fdesc *fdsc = curproc->p_fdtable->fdt_descs[fd];
     if (fdsc->fd_flags & O_WRONLY) {
@@ -120,12 +120,12 @@ int sys_write(int fd, const_userptr_t buff, size_t nbytes, int *retval) {
         return result;
     }
 
-    void *kbuf = kmalloc(sizeof(char*));
-    if ((result = copyin((const_userptr_t) buff, kbuf, sizeof(char*))) != 0) {
-        kfree(kbuf);
-        return result;
-    }
-    kfree(kbuf);
+//    void *kbuf = kmalloc(sizeof(char*));
+//    if ((result = copyin((const_userptr_t) buff, kbuf, sizeof(char*))) != 0) {
+//        kfree(kbuf);
+//        return result;
+//    }
+//    kfree(kbuf);
 
     struct fdesc *fdsc = curproc->p_fdtable->fdt_descs[fd];
 

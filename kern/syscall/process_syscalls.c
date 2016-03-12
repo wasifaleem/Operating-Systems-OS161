@@ -14,8 +14,6 @@
 #include <vfs.h>
 
 
-#define NARG_MAX 1024
-
 int sys_getpid(pid_t *retval) {
     *retval = curproc->pid;
     return 0;
@@ -86,15 +84,15 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
 int sys_execv(userptr_t program, userptr_t args, int *retval) {
     *retval = -1;
     int result;
-    char path[PATH_MAX];
+    char* path = kmalloc(PATH_MAX);
     size_t actual;
 
     if ((result = copyinstr(program, path, PATH_MAX, &actual)) != 0) {
         return result;
     }
 
-    if (actual == 0) {
-        return EFAULT;
+    if (actual < 2) {
+        return EINVAL;
     }
 
     size_t kbuff_len = 0;
@@ -106,7 +104,7 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
     }
 
     char *arg;
-    for (int i = 0; i < NARG_MAX; ++i) {
+    for (;;) {
         if ((result = copyin(args, &arg, sizeof(char *)))) {
             kfree(kbuff);
             return result;
@@ -116,7 +114,7 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
             break;
         }
 
-        if ((result = copyinstr((const_userptr_t) arg, kbuff + kbuff_len, PATH_MAX, &actual))) {
+        if ((result = copyinstr((const_userptr_t) arg, kbuff + kbuff_len, ARG_MAX, &actual))) {
             kfree(kbuff);
             return result;
         }
@@ -145,7 +143,7 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
     }
 
     /* Switch to it and activate it. */
-    proc_setas(as);
+    struct addrspace* old = proc_setas(as);
     as_activate();
 
     /* Load the executable. */
@@ -182,7 +180,7 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
             return result;
         }
 
-        if ((result = copyoutstr(kbuff + pos, (userptr_t) current, PATH_MAX, &actual))) {
+        if ((result = copyoutstr(kbuff + pos, (userptr_t) current, ARG_MAX, &actual))) {
             kfree(kbuff);
             return result;
         }
@@ -192,12 +190,16 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
 
         if (pos == kbuff_len) {
             char* pad_null = NULL;
-            result = copyout(&pad_null, (userptr_t) argv, sizeof(char*));
-            if (result) {
+            if ((result = copyout(&pad_null, (userptr_t) argv, sizeof(char*)))) {
                 kfree(kbuff);
                 return result;
             }
         }
+    }
+    kfree(path);
+    kfree(kbuff);
+    if (old) {
+        as_destroy(old);
     }
 
     *retval = 0;

@@ -80,7 +80,8 @@ struct proc {
 	pid_t parent_pid, pid;
 	volatile bool exited;
 	volatile int exit_code;
-	struct semaphore* sem_exit;
+	struct lock* p_wait_lock;
+	struct cv* p_wait_cv;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -113,5 +114,6 @@ struct addrspace *proc_setas(struct addrspace *);
 void exit_pid(pid_t pid, int exitcode);
 int wait_pid(pid_t pid, int* exitcode);
 
+void init_proctable_lock(void);
 
 #endif /* _PROC_H_ */
