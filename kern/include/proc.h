@@ -114,6 +114,4 @@ struct addrspace *proc_setas(struct addrspace *);
 void exit_pid(pid_t pid, int exitcode);
 int wait_pid(pid_t pid, int* exitcode);
 
-void init_proctable_lock(void);
-
 #endif /* _PROC_H_ */

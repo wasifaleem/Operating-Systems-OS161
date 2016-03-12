@@ -58,7 +58,6 @@
 #define MAX_RUNNING_PROCS 256
 
 static struct proc* proc_table[MAX_RUNNING_PROCS];
-struct lock* proc_table_lock;
 
 static int assign_pid(struct proc* proc);
 
@@ -201,10 +200,8 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc->exited == true);
 
-	lock_acquire(proc_table_lock);
 	KASSERT(proc_table[proc->pid] != NULL);
 	proc_table[proc->pid] = NULL;
-	lock_release(proc_table_lock);
 
 	kfree(proc->p_name);
 	kfree(proc);
@@ -405,30 +402,17 @@ proc_setas(struct addrspace *newas)
 }
 
 void exit_pid(pid_t pid, int exitcode) {
-	lock_acquire(proc_table_lock);
-
 	KASSERT(pid >= PID_MIN);
 //	kprintf("S exit_pid pid:%d\n", pid);
 	KASSERT(proc_table[pid] != NULL);
 	KASSERT(proc_table[pid]->exited == false);
 
 	struct proc* proc = proc_table[pid];
-	lock_release(proc_table_lock);
 
 	int exit = _MKWAIT_EXIT(exitcode);
 
 	lock_acquire(proc->p_wait_lock);
 
-//	for (int i = PID_MIN; i < PID_MAX; ++i) {
-//		if (proc_table[i] != NULL
-//			&& proc_table[i]->parent_pid == pid) {
-////			kprintf("disown exit_pid pid:%d\n", pid);
-//			proc_table[i]->parent_pid = -1;
-////			if (proc_table[i]->exited) {
-////				proc_destroy(proc_table[i]);
-////			}
-//		}
-//	}
 	KASSERT(proc != NULL);
 
 	proc->exited = true;
@@ -448,10 +432,7 @@ int wait_pid(pid_t pid, int* exitcode) {
 		return ESRCH;
 	}
 
-	lock_acquire(proc_table_lock);
 	struct proc* proc = proc_table[pid];
-	lock_release(proc_table_lock);
-
 	if (proc == NULL) {
 		return ESRCH;
 	}
@@ -478,22 +459,14 @@ int wait_pid(pid_t pid, int* exitcode) {
 
 static int assign_pid(struct proc* proc) {
 	KASSERT(proc != NULL);
-	lock_acquire(proc_table_lock);
 	for (int i = PID_MIN; i <= MAX_RUNNING_PROCS; ++i) {
 		if (proc_table[i] == NULL) {
 			proc->pid = i;
 			proc->parent_pid = curproc->pid;
 			proc_table[i] = proc;
-			lock_release(proc_table_lock);
 //			kprintf("assigned pid:%d from parent:%d\n", proc->pid, proc->parent_pid);
 			return 0;
 		}
 	}
-	lock_release(proc_table_lock);
 	return ENPROC;
-}
-
-
-void init_proctable_lock(void) {
-	proc_table_lock = lock_create("proc_table_lock");
 }
