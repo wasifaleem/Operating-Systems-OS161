@@ -77,11 +77,7 @@ struct proc {
 	/* file table */
 	struct fdtable* p_fdtable;
 
-	pid_t parent_pid, pid;
-	volatile bool exited;
-	volatile int exit_code;
-	struct lock* p_wait_lock;
-	struct cv* p_wait_cv;
+	pid_t pid, parent_pid;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

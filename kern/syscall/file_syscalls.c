@@ -18,14 +18,25 @@ int sys_open(userptr_t filename, int flags, int *retval) {
     *retval = -1;
     char path[PATH_MAX];
     int result;
-    size_t actual;
+    size_t actual = 0;
 
+    if (filename == NULL) {
+        return EFAULT;
+    }
+    if (flags > (O_RDONLY | O_WRONLY |  O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND) ) {
+        return EINVAL;
+    }
     if ((result = copyinstr(filename, path, PATH_MAX, &actual)) != 0) {
         return result;
     }
+    if (actual <= 1) {
+        return EINVAL;
+    }
 
-    if (actual == 0) {
-        return EFAULT;
+    struct vnode* vn;
+
+    if ((result = vfs_open(path, flags, 0, &vn))) {
+        return result;
     }
 
     int fd = find_available_fdesc();
@@ -33,15 +44,11 @@ int sys_open(userptr_t filename, int flags, int *retval) {
         return EMFILE;
     }
 
-    struct fdesc *pfd = fdesc_create(path, flags);
+    struct fdesc *pfd = fdesc_create(vn, path, flags);
     if (pfd == NULL) {
         return ENOMEM;
     }
-
-    if ((result = vfs_open(path, flags, 0, &pfd->fd_vnode))) {
-        release_fdesc(pfd);
-        return result;
-    }
+    pfd->fd_vnode = vn;
 
     if (flags && O_APPEND) {
         struct stat s;
@@ -256,12 +263,12 @@ int sys___getcwd(const_userptr_t buff, size_t buflen, int *retval) {
     *retval = -1;
     int result;
 
-    void *kbuf = kmalloc(buflen);
-    if ((result = copyout(kbuf, (userptr_t) buff, buflen)) != 0) {
-        kfree(kbuf);
-        return result;
-    }
-    kfree(kbuf);
+//    void *kbuf = kmalloc(buflen);
+//    if ((result = copyout(kbuf, (userptr_t) buff, buflen)) != 0) {
+//        kfree(kbuf);
+//        return result;
+//    }
+//    kfree(kbuf);
 
     struct iovec iov;
     struct uio u;

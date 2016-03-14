@@ -76,7 +76,7 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
         proc_destroy(newproc);
         return result;
     }
-
+//    kprintf("\nfork from %d to %d\n", curproc->pid, newproc->pid);
     *retval = newproc->pid;
     return 0;
 }
@@ -84,6 +84,7 @@ int sys_fork(struct trapframe *tf, pid_t *retval) {
 int sys_execv(userptr_t program, userptr_t args, int *retval) {
     *retval = -1;
     int result;
+    char* pad_null = NULL;
     char* path = kmalloc(PATH_MAX);
     size_t actual;
 
@@ -96,15 +97,15 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
     }
 
     size_t kbuff_len = 0;
-    int nargs = 0;
+    unsigned int nargs = 1;
     char *kbuff = kmalloc(ARG_MAX);
     if (kbuff == NULL) {
         kfree(kbuff);
-        return ENOMEM;
+        return EFAULT;
     }
 
     char *arg;
-    for (;;) {
+    for(;;nargs++, kbuff_len += actual, args += sizeof(char *)) {
         if ((result = copyin(args, &arg, sizeof(char *)))) {
             kfree(kbuff);
             return result;
@@ -118,11 +119,8 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
             kfree(kbuff);
             return result;
         }
-        kbuff_len += actual;
-        args += sizeof(char *);
-        nargs++;
     }
-
+    actual = 0;
 
     struct vnode *v;
     struct addrspace *as;
@@ -161,41 +159,33 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
         return result;
     }
 
-    vaddr_t string_start, args_start, argv, current;
-    size_t pos = 0;
+    stackptr = stackptr - kbuff_len;
 
-    stackptr -= kbuff_len;
-    stackptr -= (stackptr & (sizeof(void *) - 1));
-    string_start = stackptr;
+    vaddr_t string_start, args_start;
+    string_start = stackptr - (stackptr & (sizeof(void *) - 1));
+    args_start = string_start - nargs * sizeof(vaddr_t);
 
-    stackptr -= (nargs + 1) * sizeof(vaddr_t);
-    args_start = stackptr;
-
-    argv = args_start;
-    while (pos < kbuff_len) {
-        current = string_start + pos;
-
-        if ((result = copyout(&current, (userptr_t) argv, sizeof(char*)))) {
+    for (size_t i = 0, j = 0; i < kbuff_len; i = i + actual, j++) {
+        vaddr_t current_str = string_start + i;
+        vaddr_t current_argv = args_start + (j * sizeof(vaddr_t));
+        if ((result = copyout(&current_str, (userptr_t) current_argv, sizeof(char*)))) {
             kfree(kbuff);
             return result;
         }
 
-        if ((result = copyoutstr(kbuff + pos, (userptr_t) current, ARG_MAX, &actual))) {
+        if ((result = copyoutstr(kbuff + i, (userptr_t) current_str, ARG_MAX, &actual))) {
             kfree(kbuff);
             return result;
         }
 
-        pos += actual;
-        argv += sizeof(vaddr_t);
-
-        if (pos == kbuff_len) {
-            char* pad_null = NULL;
-            if ((result = copyout(&pad_null, (userptr_t) argv, sizeof(char*)))) {
+        if (j == nargs) {
+            if ((result = copyout(&pad_null, (userptr_t) current_argv, sizeof(char*)))) {
                 kfree(kbuff);
                 return result;
             }
         }
     }
+
     kfree(path);
     kfree(kbuff);
     if (old) {
@@ -203,7 +193,7 @@ int sys_execv(userptr_t program, userptr_t args, int *retval) {
     }
 
     *retval = 0;
-    enter_new_process(nargs, (userptr_t) args_start, NULL, stackptr, entrypoint);
+    enter_new_process(nargs - 1, (userptr_t) args_start, NULL, args_start, entrypoint);
 
 
     return 0;

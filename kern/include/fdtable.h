@@ -23,7 +23,7 @@ void fdtable_destroy(struct fdtable *);
 void fdtable_copy(struct fdtable * from, struct fdtable * to);
 
 
-struct fdesc *fdesc_create(const char * path, int flags);
+struct fdesc *fdesc_create(struct vnode* vn, const char * path, int flags);
 int find_available_fdesc(void);
 int validate_fdesc(int fd);
 void init_console_fdescs(void);
