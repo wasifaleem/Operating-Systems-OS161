@@ -61,8 +61,7 @@ struct proc_meta {
 	pid_t parent_pid, pid;
 	volatile bool exited;
 	volatile int exit_code;
-	struct cv* p_wait_cv;
-	struct lock* exit_lk;
+	struct semaphore* wait_sem;
 	struct proc* proc;
 };
 
@@ -411,11 +410,9 @@ void exit_pid(pid_t pid, int exitcode) {
 	struct proc_meta* pm = proc_table[pid];
 
 	KASSERT(pm != NULL);
-	lock_acquire(pm->exit_lk);
 	pm->exited = true;
 	pm->exit_code = _MKWAIT_EXIT(exitcode);
-	cv_broadcast(pm->p_wait_cv, pm->exit_lk);
-	lock_release(pm->exit_lk);
+	V(pm->wait_sem);
 
 //	kprintf("E exit_pid pid:%d\n", pid);
 	thread_exit(); // does not return
@@ -437,13 +434,10 @@ int wait_pid(pid_t pid, int* exitcode) {
 	if (pm->parent_pid != curproc->pid) {
 		return ECHILD;
 	}
-	lock_acquire(pm->exit_lk);
-	while (!pm->exited) {
-		cv_wait(pm->p_wait_cv, pm->exit_lk);
-	}
+	P(pm->wait_sem);
 	KASSERT(pm->exited == true);
 	*exitcode = pm->exit_code;
-	lock_release(pm->exit_lk);
+
 
 	proc_meta_destroy(pm);
 //	kprintf("E wait_pid pid:%d\n", pid);
@@ -472,17 +466,12 @@ struct proc_meta *proc_meta_create(void) {
 	if (procm == NULL) {
 		return NULL;
 	}
-	procm->p_wait_cv = cv_create("proc_meta_cv");
-	if (procm->p_wait_cv == NULL) {
+	procm->wait_sem = sem_create("proc_meta_sem", 0);
+	if (procm->wait_sem == NULL) {
 		kfree(procm);
 		return NULL;
 	}
-	procm->exit_lk = lock_create("proc_meta_lock");
-	if (procm->exit_lk == NULL) {
-		cv_destroy(procm->p_wait_cv);
-		kfree(procm);
-		return NULL;
-	}
+
 	procm->exited = false;
 	procm->parent_pid = curproc->pid;
 
@@ -496,8 +485,7 @@ void proc_meta_destroy(struct proc_meta *pm) {
 	KASSERT(proc_table[pm->pid] != NULL);
 
 	proc_table[pm->pid] = NULL;
-	lock_destroy(pm->exit_lk);
-	cv_destroy(pm->p_wait_cv);
+	sem_destroy(pm->wait_sem);
 	proc_destroy(pm->proc);
 	kfree(pm);
 }

@@ -16,7 +16,7 @@
 
 int sys_open(userptr_t filename, int flags, int *retval) {
     *retval = -1;
-    char path[PATH_MAX];
+    char* path  = kmalloc(PATH_MAX);
     int result;
     size_t actual = 0;
 
@@ -24,28 +24,37 @@ int sys_open(userptr_t filename, int flags, int *retval) {
         return EFAULT;
     }
     if (flags > (O_RDONLY | O_WRONLY |  O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND) ) {
+        kfree(path);
         return EINVAL;
     }
     if ((result = copyinstr(filename, path, PATH_MAX, &actual)) != 0) {
+        kfree(path);
         return result;
     }
     if (actual <= 1) {
+        kfree(path);
         return EINVAL;
     }
 
     struct vnode* vn;
 
     if ((result = vfs_open(path, flags, 0, &vn))) {
+        kfree(path);
+        kfree(vn);
         return result;
     }
 
     int fd = find_available_fdesc();
     if (fd < 0) {
+        kfree(path);
+        kfree(vn);
         return EMFILE;
     }
 
     struct fdesc *pfd = fdesc_create(vn, path, flags);
     if (pfd == NULL) {
+        kfree(path);
+        kfree(vn);
         return ENOMEM;
     }
     pfd->fd_vnode = vn;
@@ -53,6 +62,7 @@ int sys_open(userptr_t filename, int flags, int *retval) {
     if (flags && O_APPEND) {
         struct stat s;
         if ((result = VOP_STAT(pfd->fd_vnode, &s))) {
+            kfree(path);
             release_fdesc(pfd);
             return result;
         } else {
@@ -63,6 +73,7 @@ int sys_open(userptr_t filename, int flags, int *retval) {
     }
     curproc->p_fdtable->fdt_descs[fd] = pfd;
     *retval = fd;
+    kfree(path);
 
     return 0;
 }

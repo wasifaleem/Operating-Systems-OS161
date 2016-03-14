@@ -53,7 +53,7 @@ void fdtable_copy(struct fdtable *from, struct fdtable *to) {
 struct fdesc *fdesc_create(struct vnode* vn, const char *path, int flags) {
     struct fdesc *fdesc;
 
-    fdesc = kmalloc(sizeof(struct fdesc));
+    fdesc = kmalloc(sizeof(*fdesc));
     if (fdesc == NULL) {
         return NULL;
     }
@@ -77,7 +77,7 @@ struct fdesc *fdesc_create(struct vnode* vn, const char *path, int flags) {
 
     fdesc->fd_lock = lock_create(path);
     if (fdesc->fd_lock == NULL) {
-        kfree(fdesc->fd_vnode);
+//        kfree(fdesc->fd_vnode);
         kfree(fdesc->fd_path);
         kfree(fdesc);
         return NULL;
