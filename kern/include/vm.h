@@ -47,6 +47,7 @@
 
 /* Initialization function */
 void vm_bootstrap(void);
+void cm_bootstrap(void);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
