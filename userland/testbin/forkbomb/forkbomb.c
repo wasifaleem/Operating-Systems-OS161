@@ -66,16 +66,29 @@ main(void)
 	__time(&start_time_s, &start_time_ns);
 	int parent_pid = getpid();
 	int did_print = 0;
+	int iters = 0;
+
+	// Do not remove!
+	// We need to cause page faults on the static secprintf buffers so the
+	// pages are available when we print success. With on-demand page allocation,
+	// we will probably be out of pages by the time we try to print success.
+	secprintf(SECRET, "!!< Starting Forkbbbboooommmmbbbb >!!", "/testbin/forkbomb");
+
 	while (1) {
 		fork();
-
-		__time(&time_now_s, &time_now_ns);
 		// Only parent gets to print
-		if(getpid() == parent_pid &&
-				time_now_s - start_time_s > TEST_DURATION &&
-				!did_print) {
-			did_print = 1;
-			success(TEST161_SUCCESS, SECRET, "/testbin/forkbomb");
+		if(getpid() == parent_pid) {
+			TEST161_LPROGRESS(0);
+			if (iters > 0 && iters % 20 == 0) {
+				putchar('\n');
+			}
+			iters++;
+
+			__time(&time_now_s, &time_now_ns);
+			if (time_now_s - start_time_s > TEST_DURATION && !did_print) {
+				did_print = 1;
+				success(TEST161_SUCCESS, SECRET, "/testbin/forkbomb");
+			}
 		}
 
 		pid = getpid();

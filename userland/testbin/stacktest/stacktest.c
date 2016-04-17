@@ -28,10 +28,12 @@
  */
 
 /*
- * huge.c
+ * stacktest.c
  *
- * 	Tests the VM system by accessing a large array (sparse) that
- *	cannot fit into memory.
+ * Tests the VM system's stack by allocating a large array on the stack and
+ * accessing it in a sparse manner. In total, we allocate 4*200*4096 = 3.125M
+ * on the stack. However, we only touch 1/4 of it, meaning this test should
+ * run when with <=2M of memory if stack pages are allocated on demand.
  *
  * When the VM system assignment is done, your system should be able
  * to run this successfully.
@@ -39,54 +41,50 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <err.h>
+#include <errno.h>
 #include <test161/test161.h>
 
 #define PageSize	4096
-#define NumPages	512
+#define NumPages	200
+#define Answer      4900
 
-int sparse[NumPages][PageSize];	/* use only the first element in the row */
+static int
+stacktest1()
+{
+	int sparse[NumPages][PageSize];
+	int i, j;
+
+	for (i = 0; i < NumPages; i+=4) {
+		// This is a fresh stack frame, so it better be zeroed. Otherwise,
+		// the kernel is leaking information between processes.
+		for (j = 0; j < PageSize/4; j++) {
+			if (sparse[i][j] != 0) {
+				errx(1, "Your stack pages are leaking data!");
+			}
+		}
+		sparse[i][0] = i;
+	}
+
+	// We need to do something with the values so the compiler doesn't
+	// optimize this array away.
+	int total = 0;
+	for (i = 0; i < NumPages; i+=4) {
+		total += sparse[i][0];
+	}
+
+	return total;
+}
 
 int
 main(void)
 {
-	int i,j;
-
-	tprintf("Entering the huge program - I will stress test your VM\n");
-
-	/* move number in so that sparse[i][0]=i */
-	for (i=0; i<NumPages; i++) {
-		TEST161_TPROGRESS(i);
-		sparse[i][0]=i;
+	int total = stacktest1();
+	if (total != Answer) {
+		errx(1, "Expected %d got %d\n", Answer, total);
 	}
 
-	tprintf("stage [1] done\n");
-	nprintf("\n");
-
-	/* increment each location 5 times */
-	for (j=0; j<5; j++) {
-		for (i=0; i<NumPages; i++) {
-			TEST161_TPROGRESS(i);
-			sparse[i][0]++;
-		}
-		tprintf("stage [2.%d] done\n", j);
-		nprintf("\n");
-	}
-
-	tprintf("stage [2] done\n");
-
-	/* check if the numbers are sane */
-	for (i=NumPages-1; i>=0; i--) {
-		TEST161_TPROGRESS(i);
-		if (sparse[i][0]!=i+5) {
-			tprintf("BAD NEWS!!! - your VM mechanism has a bug!\n");
-			success(TEST161_FAIL, SECRET, "/testbin/huge");
-			exit(1);
-		}
-	}
-
-	nprintf("\n");
-	success(TEST161_SUCCESS, SECRET, "/testbin/huge");
-
+	// Success is not crashing
+	success(TEST161_SUCCESS, SECRET, "/testbin/stacktest");
 	return 0;
 }
-
