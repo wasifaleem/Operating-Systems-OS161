@@ -430,7 +430,7 @@ void exit_pid(pid_t pid, int exitcode)
 
 	KASSERT(pm != NULL);
 	pm->exited = true;
-	pm->exit_code = _MKWAIT_EXIT(exitcode);
+	pm->exit_code = (exitcode);
 	V(pm->wait_sem);
 
 	proc_remthread(curthread);

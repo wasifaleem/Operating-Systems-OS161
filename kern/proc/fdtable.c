@@ -57,7 +57,7 @@ struct fdesc *fdesc_create(struct vnode *vn, const char *path, int flags)
 {
 	struct fdesc *fdesc;
 
-	fdesc = kmalloc(sizeof(*fdesc));
+	fdesc = kmalloc(sizeof(struct fdesc));
 	if (fdesc == NULL) {
 		return NULL;
 	}

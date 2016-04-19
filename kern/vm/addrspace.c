@@ -33,6 +33,9 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <proc.h>
+#include <coremap.h>
+#include <spl.h>
+#include <mips/tlb.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -49,10 +52,18 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+	as->pt_dir = kmalloc(sizeof(struct page_directory));
+	if (as->pt_dir == NULL) {
+		kfree(as);
+		return NULL;
+	}
 
-	/*
-	 * Initialize as needed.
-	 */
+	for (int i = 0; i < PAGE_TABLE_SIZE; ++i) {
+		as->pt_dir->pt_table[i] = NULL;
+	}
+
+	as->segments = NULL;
+	as->heap = NULL;
 
 	return as;
 }
@@ -63,15 +74,79 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	struct addrspace *newas;
 
 	newas = as_create();
-	if (newas==NULL) {
+	if (newas == NULL) {
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
+	// copy segments, heap, stackptr
+	if (old->segments != NULL) {
+		newas->segments = kmalloc(sizeof(struct segment));
+		if (newas->segments == NULL) {
+			return ENOMEM;
+		}
+		*(newas->segments) = *(old->segments);
+		struct segment *new_segment = newas->segments;
+		struct segment *old_segment = old->segments->next_segment;
+		while (old_segment != NULL) {
+			new_segment->next_segment = kmalloc(sizeof(struct segment));
+			if (new_segment->next_segment == NULL) {
+				kfree(newas->segments);
+				return ENOMEM;
+			}
+			new_segment = new_segment->next_segment;
+			*(new_segment) = *(old_segment);
+			old_segment = old_segment->next_segment;
+		}
+		new_segment->next_segment = NULL;
+	}
+	if (old->heap != NULL) {
+		newas->heap = kmalloc(sizeof(struct segment));
+		if (newas->heap == NULL) {
+			return ENOMEM;
+		}
+		*(newas->heap) = *(old->heap);
+	}
 
-	(void)old;
+	// copy page dir & table & entries
+	for (unsigned i = 0; i < PAGE_TABLE_SIZE; ++i) {
+		struct page_table *pt = (old->pt_dir)->pt_table[i];
+		if (pt == NULL) {
+			(newas->pt_dir)->pt_table[i] = NULL;
+		} else {
+			(newas->pt_dir)->pt_table[i] = kmalloc(sizeof(struct page_table));
+			if ((newas->pt_dir)->pt_table[i] == NULL) {
+				return ENOMEM;
+			}
+			for (int j = 0; j < PAGE_TABLE_SIZE; ++j) {
+				struct page_table_entry *pte = pt->pt_entries[j];
+				if (pte == NULL) {
+					((newas->pt_dir)->pt_table[i])->pt_entries[j] = NULL;
+				} else {
+					struct page_table_entry *new_pte = kmalloc(sizeof(struct page_table_entry));
+					if (new_pte == NULL) {
+						return ENOMEM;
+					}
+					if (pte->valid && pte->pbase != 0) {
+						paddr_t new_pa = 0;
+						if ((new_pa = single_page_alloc(USER)) == 0) {
+							return ENOMEM;
+						}
+						new_pte->pbase = new_pa;
+						memmove((void *) PADDR_TO_KVADDR(new_pte->pbase),
+								(const void *) PADDR_TO_KVADDR(pte->pbase),
+								PAGE_SIZE);
+					}
+					((newas->pt_dir)->pt_table[i])->pt_entries[j] = new_pte;
+					new_pte->read = pte->read;
+					new_pte->write = pte->write;
+					new_pte->execute = pte->execute;
+//					new_pte->state = pte->state;
+					new_pte->valid = pte->valid;
+//					new_pte->referenced = pte->referenced;
+				}
+			}
+		}
+	}
 
 	*ret = newas;
 	return 0;
@@ -80,10 +155,31 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	/*
-	 * Clean up as needed.
-	 */
+	for (unsigned i = 0; i < PAGE_TABLE_SIZE; ++i) {
+		struct page_table *pt = (as->pt_dir)->pt_table[i];
+		if (pt != NULL) {
+			for (int j = 0; j < PAGE_TABLE_SIZE; ++j) {
+				struct page_table_entry *pte = pt->pt_entries[j];
+				if (pte != NULL) {
+					if (pte->valid && pte->pbase != 0) {
+						free_kpages(PADDR_TO_KVADDR(pte->pbase));
+					}
+					kfree(pte);
+				}
+			}
+			kfree(pt);
+		}
+	}
 
+	struct segment *curr = as->segments;
+	while (curr != NULL) {
+		struct segment *temp = curr;
+		curr = curr->next_segment;
+		kfree(temp);
+	}
+
+	kfree(as->heap);
+	kfree(as->pt_dir);
 	kfree(as);
 }
 
@@ -101,9 +197,7 @@ as_activate(void)
 		return;
 	}
 
-	/*
-	 * Write this.
-	 */
+	vm_tlbshootdown_all();
 }
 
 void
@@ -128,55 +222,87 @@ as_deactivate(void)
  */
 int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-		 int readable, int writeable, int executable)
+				 int readable, int writeable, int executable)
 {
-	/*
-	 * Write this.
-	 */
+	size_t npages;
 
-	(void)as;
-	(void)vaddr;
-	(void)memsize;
-	(void)readable;
-	(void)writeable;
-	(void)executable;
-	return ENOSYS;
+	/* Align the region. First, the base... */
+	memsize += vaddr & ~(vaddr_t) PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
+
+	/* ...and now the length. */
+	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
+
+	npages = memsize / PAGE_SIZE;
+
+	struct segment *new_segment = kmalloc(sizeof(struct segment));
+	new_segment->next_segment = NULL;
+	if (as->segments == NULL) {
+		as->segments = new_segment;
+		// alloc heap
+		as->heap = kmalloc(sizeof(struct segment));
+		as->heap->npages = 1;
+		as->heap->next_segment = NULL;
+		as->heap->read = 1;
+		as->heap->write = 1;
+		as->heap->execute = 0;
+		as->heap->vstart = 0;
+		as->heap->vend = 0;
+	} else {
+		struct segment *curr = as->segments;
+		while (curr->next_segment != NULL) {
+			curr = curr->next_segment;
+		}
+		curr->next_segment = new_segment;
+	}
+	new_segment->npages = npages;
+	new_segment->read = (unsigned int) (readable > 0);
+	new_segment->write = (unsigned int) (writeable > 0);
+	new_segment->execute = (unsigned int) (executable > 0);
+
+	new_segment->vstart = vaddr;
+	new_segment->vend = vaddr + npages * PAGE_SIZE;
+	if (new_segment->vend > as->heap->vstart) {
+		as->heap->vstart = as->heap->vend = new_segment->vend + PAGE_SIZE;
+	}
+
+	return 0;
 }
 
 int
 as_prepare_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
+	KASSERT(as->segments != NULL);
+	KASSERT(as->heap != NULL);
+	struct segment *curr = as->segments;
+	while (curr != NULL) {
+		if (alloc_segment_pte(as->pt_dir, curr->vstart, curr->npages, UP, 1, 1, 1)) { // grant all for load_elf
+			return ENOMEM;
+		}
+		curr = curr->next_segment;
+	}
 
-	(void)as;
 	return 0;
 }
 
 int
 as_complete_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
+	KASSERT(as->segments != NULL);
+	KASSERT(as->heap != NULL);
+	struct segment *curr = as->segments;
+	while (curr != NULL) {
+		alloc_segment_pte(as->pt_dir, curr->vstart, curr->npages, UP, curr->read, curr->write, curr->execute);
+		curr = curr->next_segment;
+	}
 	return 0;
 }
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
-
-	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
-
+	(void)as;
 	return 0;
 }
 

@@ -104,46 +104,51 @@ syscall(struct trapframe *tf)
 	retval_v1 = 0;
 
 	switch (callno) {
-	    case SYS_reboot:
-		err = sys_reboot(tf->tf_a0);
-		break;
-
-	    case SYS___time:
-		err = sys___time((userptr_t)tf->tf_a0,
-				 (userptr_t)tf->tf_a1);
-		break;
-
-		case SYS_open:
-		err = sys_open((userptr_t) tf->tf_a0, (int) tf->tf_a1, &retval_v0);
-		break;
-		case SYS_close:
-		err = sys_close((int) tf->tf_a0, &retval_v0);
-		break;
-		case SYS_read:
-		err = sys_read((int) tf->tf_a0, (const_userptr_t) tf->tf_a1, (size_t) tf->tf_a2, &retval_v0);
-		break;
-		case SYS_write:
-		err = sys_write((int) tf->tf_a0, (const_userptr_t) tf->tf_a1, (size_t) tf->tf_a2, &retval_v0);
-		break;
-		case SYS_dup2:
-		err = sys_dup2((int) tf->tf_a0, (int) tf->tf_a1, &retval_v0);
-		break;
+		case SYS_reboot: {
+			err = sys_reboot(tf->tf_a0);
+			break;
+		}
+		case SYS___time: {
+			err = sys___time((userptr_t) tf->tf_a0, (userptr_t) tf->tf_a1);
+			break;
+		}
+		case SYS_open: {
+			err = sys_open((userptr_t) tf->tf_a0, (int) tf->tf_a1, &retval_v0);
+			break;
+		}
+		case SYS_close: {
+			err = sys_close((int) tf->tf_a0, &retval_v0);
+			break;
+		}
+		case SYS_read: {
+			err = sys_read((int) tf->tf_a0, (const_userptr_t) tf->tf_a1, (size_t) tf->tf_a2, &retval_v0);
+			break;
+		}
+		case SYS_write: {
+			err = sys_write((int) tf->tf_a0, (const_userptr_t) tf->tf_a1, (size_t) tf->tf_a2, &retval_v0);
+			break;
+		}
+		case SYS_dup2: {
+			err = sys_dup2((int) tf->tf_a0, (int) tf->tf_a1, &retval_v0);
+			break;
+		}
 		case SYS_lseek: {
-			off_t pos = (off_t)tf->tf_a2 << 32 | tf->tf_a3;
+			off_t pos = (off_t) tf->tf_a2 << 32 | tf->tf_a3;
 			int32_t whence;
 			off_t retval;
 			copyin((const_userptr_t) tf->tf_sp + 16, &whence, sizeof(int32_t));
 			err = sys_lseek((int) tf->tf_a0, (off_t) pos, (int) whence, &retval);
-			retval_v0 = (int)((retval & 0xFFFFFFFF00000000) >> 32);
-			retval_v1 = (int)(retval & 0xFFFFFFFF);
+			retval_v0 = (int) ((retval & 0xFFFFFFFF00000000) >> 32);
+			retval_v1 = (int) (retval & 0xFFFFFFFF);
 			break;
 		}
-		case SYS_chdir:
-		err = sys_chdir((const_userptr_t) tf->tf_a0, &retval_v0);
-		break;
+		case SYS_chdir: {
+			err = sys_chdir((const_userptr_t) tf->tf_a0, &retval_v0);
+			break;
+		}
 		case SYS___getcwd:
-		err = sys___getcwd((const_userptr_t) tf->tf_a0, (size_t) tf->tf_a1, &retval_v0);
-		break;
+			err = sys___getcwd((const_userptr_t) tf->tf_a0, (size_t) tf->tf_a1, &retval_v0);
+			break;
 		case SYS_getpid: {
 			err = sys_getpid(&retval_v0);
 			break;
@@ -162,11 +167,13 @@ syscall(struct trapframe *tf)
 			break;
 		}
 		case SYS_execv: {
-			err = sys_execv((userptr_t)tf->tf_a0, (userptr_t)tf->tf_a1, &retval_v0);
+			err = sys_execv((userptr_t) tf->tf_a0, (userptr_t) tf->tf_a1, &retval_v0);
 			break;
 		}
-			/* Add stuff here */
-
+		case SYS_sbrk: {
+			err = sys_sbrk((intptr_t) tf->tf_a0, &retval_v0);
+			break;
+		}
 		default:
 			kprintf("Unknown syscall %d\n", callno);
 			err = ENOSYS;

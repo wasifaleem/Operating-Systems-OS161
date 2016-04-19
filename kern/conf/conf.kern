@@ -352,6 +352,9 @@ file      proc/fdtable.c
 
 file      vm/kmalloc.c
 
+file      vm/pagetable.c
+file      vm/coremap.c
+
 optofffile dumbvm   vm/addrspace.c
 
 #
@@ -391,6 +394,7 @@ file      syscall/runprogram.c
 file      syscall/time_syscalls.c
 file      syscall/file_syscalls.c
 file      syscall/process_syscalls.c
+file      syscall/sbrk_syscall.c
 
 #
 # Startup and initialization

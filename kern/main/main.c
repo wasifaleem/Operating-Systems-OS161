@@ -47,6 +47,7 @@
 #include <vfs.h>
 #include <device.h>
 #include <syscall.h>
+#include <coremap.h>
 #include <test.h>
 #include <kern/test161.h>
 #include <version.h>

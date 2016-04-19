@@ -22,7 +22,7 @@ int sys_getpid(pid_t *retval)
 
 void sys__exit(int code)
 {
-	exit_pid(curproc->pid, code);
+	exit_pid(curproc->pid, _MKWAIT_EXIT(code));
 }
 
 
@@ -36,7 +36,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retval)
 	}
 
 	if (options != 0
-		&& curproc->pid != pid) {
+		&& (curproc != kproc || curproc->pid != pid)) {
 		return EINVAL;
 	}
 
