@@ -407,11 +407,11 @@ void exit_pid(pid_t pid, int exitcode)
 {
 //	kprintf("S exit_pid pid:%d\n", pid);
 
+	lock_acquire(proc_table_lock);
+
 	KASSERT(pid >= PID_MIN);
 	KASSERT(proc_table[pid] != NULL);
 	KASSERT(proc_table[pid]->exited == false);
-
-	lock_acquire(proc_table_lock);
 
 	for (unsigned i = PID_MIN; i < MAX_RUNNING_PROCS; i++) {
 		if (proc_table[i] == NULL) {
@@ -430,7 +430,7 @@ void exit_pid(pid_t pid, int exitcode)
 
 	KASSERT(pm != NULL);
 	pm->exited = true;
-	pm->exit_code = _MKWAIT_EXIT(exitcode);
+	pm->exit_code = (exitcode);
 	V(pm->wait_sem);
 
 	proc_remthread(curthread);
@@ -468,6 +468,7 @@ int wait_pid(pid_t pid, int *exitcode)
 	P(pm->wait_sem);
 	KASSERT(pm->exited == true);
 	*exitcode = pm->exit_code;
+	proc_meta_destroy((unsigned int) pid);
 //	kprintf("E wait_pid pid:%d\n", pid);
 
 	return 0;
@@ -475,6 +476,7 @@ int wait_pid(pid_t pid, int *exitcode)
 
 static int assign_pid(struct proc *proc)
 {
+	lock_acquire(proc_table_lock);
 	KASSERT(proc != NULL);
 	for (int i = PID_MIN; i <= MAX_RUNNING_PROCS; ++i) {
 		if (proc_table[i] == NULL) {
@@ -484,10 +486,12 @@ static int assign_pid(struct proc *proc)
 				proc->pid = i;
 				proc->parent_pid = curproc->pid;
 				proc_table[i] = pm;
+				lock_release(proc_table_lock);
 				return 0;
 			}
 		}
 	}
+	lock_release(proc_table_lock);
 	return ENPROC;
 }
 
