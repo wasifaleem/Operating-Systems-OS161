@@ -116,8 +116,7 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 
 	kprintf("Fatal user mode trap %u sig %d (%s, epc 0x%x, vaddr 0x%x)\n",
 		code, sig, trapcodenames[code], epc, vaddr);
-//	proc_destroy(curproc);
-	sys__exit(0);
+	exit_pid(curproc->pid,  _MKWAIT_SIG(sig));
 }
 
 /*

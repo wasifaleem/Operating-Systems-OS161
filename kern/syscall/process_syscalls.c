@@ -22,7 +22,7 @@ int sys_getpid(pid_t *retval)
 
 void sys__exit(int code)
 {
-	exit_pid(curproc->pid, code);
+	exit_pid(curproc->pid, _MKWAIT_EXIT(code));
 }
 
 
