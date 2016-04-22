@@ -40,10 +40,10 @@ int sys_sbrk(intptr_t amount, int *retval)
 					free_kpages(pvaddr);
 					pte->valid = 0;
 					pte->pbase = 0;
-
+//					vm_tlbshootdown_all();
 					int spl = splhigh();
 					int i = tlb_probe(free, 0);
-					if (i > 0) {
+					if (i >= 0) {
 						tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
 					}
 					splx(spl);

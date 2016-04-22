@@ -123,22 +123,22 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	spinlock_acquire(&tlb_lock);
 	spl = splhigh();
 	paddr_t paddr = (pte->pbase);
-
-	for (int i=0; i<NUM_TLB; i++) {
-		tlb_read(&ehi, &elo, i);
-		if (elo & TLBLO_VALID) {
-			continue;
-		}
-		ehi = faultaddress;
-		elo = paddr | TLBLO_VALID;
-		if (pte->write) {
-			elo |= TLBLO_DIRTY;
-		}
-		tlb_write(ehi, elo, i);
-		splx(spl);
-		spinlock_release(&tlb_lock);
-		return 0;
-	}
+//
+//	for (int i=0; i<NUM_TLB; i++) {
+//		tlb_read(&ehi, &elo, i);
+//		if (elo & TLBLO_VALID) {
+//			continue;
+//		}
+//		ehi = faultaddress;
+//		elo = paddr | TLBLO_VALID;
+//		if (pte->write) {
+//			elo |= TLBLO_DIRTY;
+//		}
+//		tlb_write(ehi, elo, i);
+//		splx(spl);
+//		spinlock_release(&tlb_lock);
+//		return 0;
+//	}
 
 
 	ehi = faultaddress;
